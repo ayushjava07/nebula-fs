@@ -4,11 +4,13 @@
 # Builds all fuzz targets using CFL environment variables.
 #
 # Environment (provided by CFL):
+#   SRC    - source root directory
 #   OUT    - output directory for fuzz targets
 #   CC, CXX, CFLAGS, CXXFLAGS
 #   LIB_FUZZING_ENGINE
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# CFL sets $SRC to the repo root. Fall back to pwd if unset.
+PROJECT_DIR="${SRC:-$(pwd)}"
 BUILD_DIR="${PROJECT_DIR}/build_fuzz"
 
 mkdir -p "${BUILD_DIR}"
@@ -35,7 +37,7 @@ for fuzz_target in archive_parser_fuzzer index_fuzzer compression_fuzzer journal
     fi
 done
 
-# Per-harness seed corpora (CFL also auto-detects fuzz/corpus/ for shared seeds)
+# Per-harness seed corpora
 SEED_DIR="${PROJECT_DIR}/fuzz/corpus"
 if [[ -d "${SEED_DIR}" ]]; then
     for fuzz_target in archive_parser_fuzzer index_fuzzer compression_fuzzer journal_fuzzer metadata_fuzzer; do
