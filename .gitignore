@@ -1,0 +1,23 @@
+# Build artifacts
+build/
+build_fuzz/
+cmake-build-*/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated seed corpus builder binary
+fuzz/seed_corpus/gen_seeds
+
+# Library
+*.a
+*.o
+*.so

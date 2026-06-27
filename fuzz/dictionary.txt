@@ -1,0 +1,21 @@
+# NebulaFS fuzzing dictionary
+# Magic bytes
+"NBF\x01"
+# Compression block markers
+"BLK"
+# Journal entry types
+"\x01"  # BeginCheckpoint
+"\x02"  # EndCheckpoint
+"\x04"  # CreateEntry
+"\x08"  # Commit
+"\x10"  # Rollback
+# Header flags
+"\x01"  # HeaderEncrypted
+"\x02"  # HeaderJournaled
+"\x04"  # HeaderRecovery
+"\x20"  # HeaderDedup
+# Compression algorithms
+"\x00"  # None
+"\x01"  # LZ4
+"\x02"  # Zlib
+"\x03"  # Zstd

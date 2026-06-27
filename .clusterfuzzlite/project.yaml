@@ -1,0 +1,10 @@
+# ClusterFuzzLite / Fenrir project configuration for NebulaFS.
+# See: https://google.github.io/clusterfuzzlite/setting-up-fuzzing/project-configuration/
+project: nebula-fs
+language: c++
+fuzz_targets:
+  - archive_parser_fuzzer
+  - compression_fuzzer
+  - index_fuzzer
+  - journal_fuzzer
+  - metadata_fuzzer
