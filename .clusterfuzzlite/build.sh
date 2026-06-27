@@ -9,8 +9,19 @@
 #   CC, CXX, CFLAGS, CXXFLAGS
 #   LIB_FUZZING_ENGINE
 
-# CFL sets $SRC to the repo root. Fall back to pwd if unset.
-PROJECT_DIR="${SRC:-$(pwd)}"
+# Find the project root.
+# CFL sets $SRC. Fall back: the script's own directory, then pwd.
+if [[ -n "${SRC:-}" && -f "${SRC}/CMakeLists.txt" ]]; then
+    PROJECT_DIR="${SRC}"
+elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/CMakeLists.txt" ]]; then
+    PROJECT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+elif [[ -f "$(pwd)/CMakeLists.txt" ]]; then
+    PROJECT_DIR="$(pwd)"
+else
+    echo "Error: cannot find CMakeLists.txt"
+    exit 1
+fi
+
 BUILD_DIR="${PROJECT_DIR}/build_fuzz"
 
 mkdir -p "${BUILD_DIR}"
