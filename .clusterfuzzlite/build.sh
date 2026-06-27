@@ -10,7 +10,6 @@
 #   LIB_FUZZING_ENGINE
 
 # Find the project root.
-# CFL sets $SRC. Fall back: the script's own directory, then pwd.
 if [[ -n "${SRC:-}" && -f "${SRC}/CMakeLists.txt" ]]; then
     PROJECT_DIR="${SRC}"
 elif [[ -f "$(dirname "${BASH_SOURCE[0]}")/CMakeLists.txt" ]]; then
@@ -20,14 +19,6 @@ elif [[ -f "$(pwd)/CMakeLists.txt" ]]; then
 else
     echo "Error: cannot find CMakeLists.txt"
     exit 1
-fi
-
-# Install dependencies needed by the build.
-# The CFL base image has zlib and openssl but not lz4-dev or zstd-dev.
-if command -v apt-get &>/dev/null; then
-    apt-get update -qq
-    apt-get install -y -qq --no-install-recommends \
-        liblz4-dev libzstd-dev 2>/dev/null || true
 fi
 
 BUILD_DIR="${PROJECT_DIR}/build_fuzz"
