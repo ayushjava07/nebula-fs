@@ -418,7 +418,7 @@ std::error_code ArchiveWriter::writeBlocksSection() {
 std::error_code ArchiveWriter::writeJournalSection() {
     if (!journal_) return std::error_code();
     header_.setJournalOffset(currentOffset_);
-    journal_->endCheckpoint();
+    { auto _ec = journal_->endCheckpoint(); (void)_ec; }
     auto journalData = journal_->serialize();
     header_.setJournalSize(journalData.size());
     file_.write(reinterpret_cast<const char*>(journalData.data()),
@@ -429,7 +429,7 @@ std::error_code ArchiveWriter::writeJournalSection() {
 }
 
 std::error_code ArchiveWriter::finalizeArchive() {
-    if (journal_) journal_->commit();
+    if (journal_) { auto _ec = journal_->commit(); (void)_ec; }
 
     auto ec = writeMetadataSection();
     if (ec) return ec;

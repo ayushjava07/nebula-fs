@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.16)
 
 set(FUZZ_SOURCES
   archive_parser_fuzzer.cpp
@@ -8,10 +8,10 @@ set(FUZZ_SOURCES
   metadata_fuzzer.cpp
 )
 
-set(FUZZ_LIBS nebula ${NEBULA_LIBS})
+# nebula already links all dependencies (system or bundled)
+set(FUZZ_LIBS nebula)
 
 # Allow the fuzzer engine flag to be overridden (e.g. by ClusterFuzzLite).
-# Default to libFuzzer for local builds.
 if(NOT FUZZER_ENGINE_FLAG)
   set(FUZZER_ENGINE_FLAG "-fsanitize=fuzzer")
 endif()

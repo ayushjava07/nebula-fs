@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.16)
 project(NebulaFS
   VERSION 1.0.0
   DESCRIPTION "Lightweight embedded binary object database and archive format"
@@ -35,24 +35,24 @@ if(NEBULA_ENABLE_TSAN)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
 endif()
 
-# Find required system libraries
-find_package(PkgConfig QUIET)
+# ---- Dependencies: try system, fall back to bundled ----
 
 # ZLIB
 find_package(ZLIB QUIET)
 if(NOT ZLIB_FOUND)
   find_library(ZLIB_LIBRARIES z)
   find_path(ZLIB_INCLUDE_DIRS zlib.h)
-  if(ZLIB_LIBRARIES AND ZLIB_INCLUDE_DIRS)
+endif()
+if(ZLIB_FOUND OR (ZLIB_LIBRARIES AND ZLIB_INCLUDE_DIRS))
+  if(NOT TARGET ZLIB::ZLIB)
     add_library(ZLIB::ZLIB UNKNOWN IMPORTED)
     set_target_properties(ZLIB::ZLIB PROPERTIES
       IMPORTED_LOCATION "${ZLIB_LIBRARIES}"
       INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_INCLUDE_DIRS}")
-    set(ZLIB_FOUND TRUE)
   endif()
-endif()
-if(NOT ZLIB_FOUND)
-  message(FATAL_ERROR "ZLIB not found. Install zlib1g-dev or equivalent.")
+  set(NEBULA_USE_BUNDLED_ZLIB OFF)
+else()
+  set(NEBULA_USE_BUNDLED_ZLIB ON)
 endif()
 
 # OpenSSL
@@ -61,7 +61,9 @@ if(NOT OpenSSL_FOUND)
   find_library(OPENSSL_SSL_LIBRARY ssl)
   find_library(OPENSSL_CRYPTO_LIBRARY crypto)
   find_path(OPENSSL_INCLUDE_DIR openssl/ssl.h)
-  if(OPENSSL_SSL_LIBRARY AND OPENSSL_CRYPTO_LIBRARY AND OPENSSL_INCLUDE_DIR)
+endif()
+if(OpenSSL_FOUND OR (OPENSSL_SSL_LIBRARY AND OPENSSL_CRYPTO_LIBRARY AND OPENSSL_INCLUDE_DIR))
+  if(NOT TARGET OpenSSL::SSL)
     add_library(OpenSSL::SSL UNKNOWN IMPORTED)
     set_target_properties(OpenSSL::SSL PROPERTIES
       IMPORTED_LOCATION "${OPENSSL_SSL_LIBRARY}"
@@ -70,11 +72,11 @@ if(NOT OpenSSL_FOUND)
     set_target_properties(OpenSSL::Crypto PROPERTIES
       IMPORTED_LOCATION "${OPENSSL_CRYPTO_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${OPENSSL_INCLUDE_DIR}")
-    set(OpenSSL_FOUND TRUE)
   endif()
-endif()
-if(NOT OpenSSL_FOUND)
-  message(FATAL_ERROR "OpenSSL not found. Install libssl-dev or equivalent.")
+  add_definitions(-DNEBULA_HAS_OPENSSL)
+  set(NEBULA_USE_BUNDLED_OPENSSL OFF)
+else()
+  set(NEBULA_USE_BUNDLED_OPENSSL ON)
 endif()
 
 # LZ4
@@ -82,16 +84,17 @@ find_package(lz4 QUIET)
 if(NOT lz4_FOUND)
   find_library(LZ4_LIBRARY lz4)
   find_path(LZ4_INCLUDE_DIR lz4.h)
-  if(LZ4_LIBRARY AND LZ4_INCLUDE_DIR)
+endif()
+if(lz4_FOUND OR (LZ4_LIBRARY AND LZ4_INCLUDE_DIR))
+  if(NOT TARGET lz4::lz4)
     add_library(lz4::lz4 UNKNOWN IMPORTED)
     set_target_properties(lz4::lz4 PROPERTIES
       IMPORTED_LOCATION "${LZ4_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${LZ4_INCLUDE_DIR}")
-    set(lz4_FOUND TRUE)
   endif()
-endif()
-if(NOT lz4_FOUND)
-  message(FATAL_ERROR "LZ4 not found. Install liblz4-dev or equivalent.")
+  set(NEBULA_USE_BUNDLED_LZ4 OFF)
+else()
+  set(NEBULA_USE_BUNDLED_LZ4 ON)
 endif()
 
 # Zstd
@@ -99,25 +102,56 @@ find_package(zstd QUIET)
 if(NOT zstd_FOUND)
   find_library(ZSTD_LIBRARY zstd)
   find_path(ZSTD_INCLUDE_DIR zstd.h)
-  if(ZSTD_LIBRARY AND ZSTD_INCLUDE_DIR)
+endif()
+if(zstd_FOUND OR (ZSTD_LIBRARY AND ZSTD_INCLUDE_DIR))
+  if(NOT TARGET zstd::zstd)
     add_library(zstd::zstd UNKNOWN IMPORTED)
     set_target_properties(zstd::zstd PROPERTIES
       IMPORTED_LOCATION "${ZSTD_LIBRARY}"
       INTERFACE_INCLUDE_DIRECTORIES "${ZSTD_INCLUDE_DIR}")
-    set(zstd_FOUND TRUE)
   endif()
-endif()
-if(NOT zstd_FOUND)
-  message(FATAL_ERROR "zstd not found. Install libzstd-dev or equivalent.")
+  set(NEBULA_USE_BUNDLED_ZSTD OFF)
+else()
+  set(NEBULA_USE_BUNDLED_ZSTD ON)
 endif()
 
-set(NEBULA_LIBS
-  ZLIB::ZLIB
-  OpenSSL::SSL
-  OpenSSL::Crypto
-  lz4::lz4
-  zstd::zstd
-)
+# Fall back to bundled deps if any system libs were missing
+if(NEBULA_USE_BUNDLED_ZLIB OR NEBULA_USE_BUNDLED_LZ4 OR NEBULA_USE_BUNDLED_ZSTD OR NEBULA_USE_BUNDLED_OPENSSL)
+  add_subdirectory(third_party)
+  message(STATUS "Using bundled dependencies for some libraries")
+else()
+  message(STATUS "Using system dependencies")
+endif()
+
+# Build target lists for NEBULA_LIBS
+set(NEBULA_LIBS)
+if(NEBULA_USE_BUNDLED_ZLIB)
+  list(APPEND NEBULA_LIBS bundled_zlib)
+  list(APPEND NEBULA_LIBS_BUNDLED bundled_zlib)
+else()
+  list(APPEND NEBULA_LIBS ZLIB::ZLIB)
+endif()
+
+if(NEBULA_USE_BUNDLED_LZ4)
+  list(APPEND NEBULA_LIBS bundled_lz4)
+  list(APPEND NEBULA_LIBS_BUNDLED bundled_lz4)
+else()
+  list(APPEND NEBULA_LIBS lz4::lz4)
+endif()
+
+if(NEBULA_USE_BUNDLED_ZSTD)
+  list(APPEND NEBULA_LIBS bundled_zstd)
+  list(APPEND NEBULA_LIBS_BUNDLED bundled_zstd)
+else()
+  list(APPEND NEBULA_LIBS zstd::zstd)
+endif()
+
+if(NEBULA_USE_BUNDLED_OPENSSL)
+  list(APPEND NEBULA_LIBS bundled_sha256)
+  list(APPEND NEBULA_LIBS_BUNDLED bundled_sha256)
+else()
+  list(APPEND NEBULA_LIBS OpenSSL::SSL OpenSSL::Crypto)
+endif()
 
 set(NEBULA_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 set(NEBULA_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")

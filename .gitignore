@@ -1,6 +1,5 @@
 # Build artifacts
-build/
-build_fuzz/
+build*/
 cmake-build-*/
 
 # IDE

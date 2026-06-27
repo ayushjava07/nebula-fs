@@ -1,9 +1,12 @@
 #include "nebula/crypto/EncryptionEngine.hpp"
+#include "nebula/Error.hpp"
 
+#ifdef NEBULA_HAS_OPENSSL
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/err.h>
 #include <openssl/kdf.h>
+#endif
 
 #include <cstring>
 #include <system_error>
@@ -35,26 +38,43 @@ EncryptionEngine& EncryptionEngine::operator=(EncryptionEngine&& other) noexcept
 }
 
 void EncryptionEngine::initContext() {
+#ifdef NEBULA_HAS_OPENSSL
     if (config_.algorithm == EncryptionAlgorithm::AES256GCM) {
         ctx_ = EVP_CIPHER_CTX_new();
     }
+#endif
 }
 
 void EncryptionEngine::destroyContext() noexcept {
+#ifdef NEBULA_HAS_OPENSSL
     if (ctx_) {
         EVP_CIPHER_CTX_free(static_cast<EVP_CIPHER_CTX*>(ctx_));
-        ctx_ = nullptr;
     }
+#endif
+    ctx_ = nullptr;
 }
 
 CryptoResult EncryptionEngine::encrypt(std::span<const uint8_t> data) {
+#ifdef NEBULA_HAS_OPENSSL
     auto iv = generateIV();
     return encrypt(data, iv);
+#else
+    (void)data;
+    CryptoResult r;
+    r.ec = make_error_code(ErrorCode::EncryptionError);
+    return r;
+#endif
 }
 
 CryptoResult EncryptionEngine::encrypt(std::span<const uint8_t> data,
                                         std::span<const uint8_t> iv) {
+#ifdef NEBULA_HAS_OPENSSL
     CryptoResult result;
+
+    if (!ctx_) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
+        return result;
+    }
 
     if (config_.algorithm == EncryptionAlgorithm::None) {
         result.data.assign(data.begin(), data.end());
@@ -62,68 +82,78 @@ CryptoResult EncryptionEngine::encrypt(std::span<const uint8_t> data,
         return result;
     }
 
-    if (!ctx_) {
-        result.ec = make_error_code(std::errc::invalid_argument);
-        return result;
-    }
-
-    const EVP_CIPHER* cipher = EVP_aes_256_gcm();
-    int len = 0;
+    std::vector<uint8_t> buf(data.size() + EVP_MAX_BLOCK_LENGTH + 16);
+    int outLen = 0;
 
     if (1 != EVP_EncryptInit_ex(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                cipher, nullptr, nullptr, nullptr)) {
-        result.ec = make_error_code(std::errc::io_error);
+                                EVP_aes_256_gcm(), nullptr, nullptr, nullptr)) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
 
     if (1 != EVP_CIPHER_CTX_ctrl(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                  EVP_CTRL_GCM_SET_IVLEN,
-                                  static_cast<int>(iv.size()), nullptr)) {
-        result.ec = make_error_code(std::errc::io_error);
+                                 EVP_CTRL_GCM_SET_IVLEN, 12, nullptr)) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
 
-    if (1 != EVP_EncryptInit_ex(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                nullptr, nullptr,
+    if (1 != EVP_EncryptInit_ex(static_cast<EVP_CIPHER_CTX*>(ctx_), nullptr, nullptr,
                                 config_.key.data(), iv.data())) {
-        result.ec = make_error_code(std::errc::io_error);
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
-
-    result.data.resize(data.size() + kAESTagLength);
 
     if (1 != EVP_EncryptUpdate(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                result.data.data(), &len,
+                                buf.data() + 12, &outLen,
                                 data.data(), static_cast<int>(data.size()))) {
-        result.ec = make_error_code(std::errc::io_error);
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
-    size_t totalLen = static_cast<size_t>(len);
+    int cipherLen = outLen;
 
     if (1 != EVP_EncryptFinal_ex(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                  result.data.data() + totalLen, &len)) {
-        result.ec = make_error_code(std::errc::io_error);
+                                 buf.data() + 12 + cipherLen, &outLen)) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
-    totalLen += static_cast<size_t>(len);
+    cipherLen += outLen;
 
+    uint8_t tag[16] = {};
     if (1 != EVP_CIPHER_CTX_ctrl(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                  EVP_CTRL_GCM_GET_TAG, kAESTagLength,
-                                  result.tag.data())) {
-        result.ec = make_error_code(std::errc::io_error);
+                                 EVP_CTRL_GCM_GET_TAG, 16, tag)) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
 
-    result.data.resize(totalLen);
-    std::copy(iv.begin(), iv.end(), result.iv.begin());
+    std::memcpy(buf.data(), iv.data(), 12);
+    std::memcpy(buf.data() + 12 + cipherLen, tag, 16);
+    buf.resize(12 + cipherLen + 16);
+    EVP_CIPHER_CTX_reset(static_cast<EVP_CIPHER_CTX*>(ctx_));
+
+    result.data = std::move(buf);
+    std::memcpy(result.iv.data(), iv.data(), kAESIVLength);
+    std::memcpy(result.tag.data(), tag, kAESTagLength);
     result.success = true;
     return result;
+#else
+    (void)data;
+    (void)iv;
+    CryptoResult r;
+    r.ec = make_error_code(ErrorCode::EncryptionError);
+    return r;
+#endif
 }
 
 CryptoResult EncryptionEngine::decrypt(std::span<const uint8_t> encryptedData,
                                         std::span<const uint8_t> iv,
                                         std::span<const uint8_t> tag) {
+#ifdef NEBULA_HAS_OPENSSL
     CryptoResult result;
+
+    if (!ctx_) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
+        return result;
+    }
 
     if (config_.algorithm == EncryptionAlgorithm::None) {
         result.data.assign(encryptedData.begin(), encryptedData.end());
@@ -131,117 +161,141 @@ CryptoResult EncryptionEngine::decrypt(std::span<const uint8_t> encryptedData,
         return result;
     }
 
-    if (!ctx_) {
-        result.ec = make_error_code(std::errc::invalid_argument);
-        return result;
-    }
-
-    const EVP_CIPHER* cipher = EVP_aes_256_gcm();
-    int len = 0;
+    std::vector<uint8_t> buf(encryptedData.size() + 16);
+    int outLen = 0;
 
     if (1 != EVP_DecryptInit_ex(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                cipher, nullptr, nullptr, nullptr)) {
-        result.ec = make_error_code(std::errc::io_error);
+                                EVP_aes_256_gcm(), nullptr, nullptr, nullptr)) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
 
     if (1 != EVP_CIPHER_CTX_ctrl(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                  EVP_CTRL_GCM_SET_IVLEN,
-                                  static_cast<int>(iv.size()), nullptr)) {
-        result.ec = make_error_code(std::errc::io_error);
+                                 EVP_CTRL_GCM_SET_IVLEN, 12, nullptr)) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
 
-    if (1 != EVP_DecryptInit_ex(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                nullptr, nullptr,
+    if (1 != EVP_DecryptInit_ex(static_cast<EVP_CIPHER_CTX*>(ctx_), nullptr, nullptr,
                                 config_.key.data(), iv.data())) {
-        result.ec = make_error_code(std::errc::io_error);
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
-
-    result.data.resize(encryptedData.size());
 
     if (1 != EVP_DecryptUpdate(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                result.data.data(), &len,
-                                encryptedData.data(),
-                                static_cast<int>(encryptedData.size()))) {
-        result.ec = make_error_code(std::errc::io_error);
+                                buf.data(), &outLen,
+                                encryptedData.data(), static_cast<int>(encryptedData.size()))) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
-    size_t totalLen = static_cast<size_t>(len);
+    int plainLen = outLen;
 
     if (1 != EVP_CIPHER_CTX_ctrl(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                  EVP_CTRL_GCM_SET_TAG,
-                                  static_cast<int>(tag.size()),
-                                  const_cast<uint8_t*>(tag.data()))) {
-        result.ec = make_error_code(std::errc::io_error);
+                                 EVP_CTRL_GCM_SET_TAG, kAESTagLength,
+                                 const_cast<uint8_t*>(tag.data()))) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
 
-    int ret = EVP_DecryptFinal_ex(static_cast<EVP_CIPHER_CTX*>(ctx_),
-                                   result.data.data() + totalLen, &len);
-    if (ret <= 0) {
-        result.ec = make_error_code(std::errc::io_error);
+    if (1 != EVP_DecryptFinal_ex(static_cast<EVP_CIPHER_CTX*>(ctx_),
+                                 buf.data() + plainLen, &outLen)) {
+        result.ec = make_error_code(ErrorCode::EncryptionError);
         return result;
     }
-    totalLen += static_cast<size_t>(len);
+    plainLen += outLen;
 
-    result.data.resize(totalLen);
+    buf.resize(static_cast<size_t>(plainLen));
+    EVP_CIPHER_CTX_reset(static_cast<EVP_CIPHER_CTX*>(ctx_));
+
+    result.data = std::move(buf);
     result.success = true;
     return result;
+#else
+    (void)encryptedData;
+    (void)iv;
+    (void)tag;
+    CryptoResult r;
+    r.ec = make_error_code(ErrorCode::EncryptionError);
+    return r;
+#endif
 }
 
 std::array<uint8_t, kAESIVLength> EncryptionEngine::generateIV() {
+#ifdef NEBULA_HAS_OPENSSL
     std::array<uint8_t, kAESIVLength> iv{};
-    RAND_bytes(iv.data(), static_cast<int>(iv.size()));
+    if (1 != RAND_bytes(iv.data(), static_cast<int>(iv.size()))) {
+        std::memset(iv.data(), 0, iv.size());
+    }
     return iv;
+#else
+    return {};
+#endif
 }
 
 std::array<uint8_t, kAESKeyLength> EncryptionEngine::generateKey() {
+#ifdef NEBULA_HAS_OPENSSL
     std::array<uint8_t, kAESKeyLength> key{};
-    RAND_bytes(key.data(), static_cast<int>(key.size()));
+    if (1 != RAND_bytes(key.data(), static_cast<int>(key.size()))) {
+        std::memset(key.data(), 0, key.size());
+    }
     return key;
+#else
+    return {};
+#endif
 }
 
 std::array<uint8_t, kAESKeyLength> EncryptionEngine::deriveKey(
     std::string_view password,
     std::span<const uint8_t> salt,
     int iterations) {
+#ifdef NEBULA_HAS_OPENSSL
     std::array<uint8_t, kAESKeyLength> key{};
-
-    PKCS5_PBKDF2_HMAC_SHA1(
-        password.data(), static_cast<int>(password.size()),
-        salt.data(), static_cast<int>(salt.size()),
-        iterations,
-        static_cast<int>(key.size()),
-        key.data());
-
+    if (1 != PKCS5_PBKDF2_HMAC(password.data(), static_cast<int>(password.size()),
+                                salt.data(), static_cast<int>(salt.size()),
+                                iterations, EVP_sha256(),
+                                static_cast<int>(key.size()), key.data())) {
+        std::memset(key.data(), 0, key.size());
+    }
     return key;
+#else
+    (void)password;
+    (void)salt;
+    (void)iterations;
+    return {};
+#endif
 }
 
 std::vector<uint8_t> EncryptionEngine::generateSalt(size_t length) {
+#ifdef NEBULA_HAS_OPENSSL
     std::vector<uint8_t> salt(length);
-    RAND_bytes(salt.data(), static_cast<int>(length));
+    if (1 != RAND_bytes(salt.data(), static_cast<int>(salt.size()))) {
+        return std::vector<uint8_t>(length, 0);
+    }
     return salt;
+#else
+    (void)length;
+    return {};
+#endif
 }
 
 void EncryptionEngine::setKey(std::span<const uint8_t> key) {
-    std::copy(key.begin(), key.end(), config_.key.begin());
+    std::memcpy(config_.key.data(), key.data(),
+                std::min(key.size(), config_.key.size()));
 }
 
 void EncryptionEngine::setPassword(std::string_view password, std::span<const uint8_t> salt) {
     config_.password = password;
     config_.keyDerivation = true;
-    config_.key = deriveKey(password, salt, config_.pbkdf2Iterations);
+    auto derived = deriveKey(password, salt);
+    std::memcpy(config_.key.data(), derived.data(), config_.key.size());
 }
 
 bool EncryptionEngine::isReady() const noexcept {
-    if (config_.algorithm == EncryptionAlgorithm::None) return true;
-    bool hasKey = false;
-    for (auto byte : config_.key) {
-        if (byte != 0) { hasKey = true; break; }
-    }
-    return hasKey || config_.keyDerivation;
+#ifdef NEBULA_HAS_OPENSSL
+    return ctx_ != nullptr && config_.algorithm != EncryptionAlgorithm::None;
+#else
+    return false;
+#endif
 }
 
 } // namespace crypto

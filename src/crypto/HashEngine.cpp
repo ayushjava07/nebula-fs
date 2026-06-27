@@ -1,6 +1,8 @@
 #include "nebula/crypto/HashEngine.hpp"
 
+#ifdef NEBULA_HAS_OPENSSL
 #include <openssl/evp.h>
+#endif
 #include <fcntl.h>
 #include <unistd.h>
 #include <algorithm>
@@ -33,6 +35,7 @@ HashEngine& HashEngine::operator=(HashEngine&& other) noexcept {
 }
 
 void HashEngine::initContext() {
+#ifdef NEBULA_HAS_OPENSSL
     ctx_ = EVP_MD_CTX_new();
     const EVP_MD* md = nullptr;
     switch (algo_) {
@@ -43,13 +46,18 @@ void HashEngine::initContext() {
     if (ctx_) {
         EVP_DigestInit_ex(static_cast<EVP_MD_CTX*>(ctx_), md, nullptr);
     }
+#else
+    ctx_ = nullptr;
+#endif
 }
 
 void HashEngine::destroyContext() noexcept {
+#ifdef NEBULA_HAS_OPENSSL
     if (ctx_) {
         EVP_MD_CTX_free(static_cast<EVP_MD_CTX*>(ctx_));
-        ctx_ = nullptr;
     }
+#endif
+    ctx_ = nullptr;
 }
 
 void HashEngine::reset() {
@@ -62,17 +70,24 @@ void HashEngine::update(std::span<const uint8_t> data) {
 }
 
 void HashEngine::update(const uint8_t* data, size_t length) {
+#ifdef NEBULA_HAS_OPENSSL
     if (ctx_ && length > 0) {
         EVP_DigestUpdate(static_cast<EVP_MD_CTX*>(ctx_), data, length);
     }
+#else
+    (void)data;
+    (void)length;
+#endif
 }
 
 ChecksumValue HashEngine::finalize() {
     ChecksumValue hash{};
+#ifdef NEBULA_HAS_OPENSSL
     if (ctx_) {
         unsigned int len = static_cast<unsigned int>(hash.size());
         EVP_DigestFinal_ex(static_cast<EVP_MD_CTX*>(ctx_), hash.data(), &len);
     }
+#endif
     return hash;
 }
 
