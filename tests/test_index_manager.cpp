@@ -138,6 +138,15 @@ TEST(IndexManagerTest, DeserializeCorrupt) {
     EXPECT_TRUE(ec);
 }
 
+TEST(IndexManagerTest, DeserializeRejectsExcessiveCount) {
+    // VarInt-encoded count = 0x20000000 (536,870,912 entries)
+    // With min 35 bytes/entry = ~18.8 GB needed, but input is tiny.
+    std::vector<uint8_t> data = {0x80, 0x80, 0x80, 0x80, 0x02};
+    index::IndexManager mgr;
+    auto ec = mgr.deserialize(data);
+    EXPECT_TRUE(ec);
+}
+
 TEST(IndexManagerTest, Validate) {
     index::IndexManager mgr;
     EXPECT_TRUE(mgr.validate());

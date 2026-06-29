@@ -172,6 +172,13 @@ std::error_code IndexManager::deserialize(std::span<const uint8_t> data) {
 
     uint64_t count = countResult.value;
     offset = countResult.consumed;
+
+    // Each entry needs at least 3 VarInts + 32-byte checksum.
+    // Minimum bytes per entry = 1 + 1 + 1 + 32 = 35.
+    static constexpr size_t kMinBytesPerEntry = 35;
+    if (count > (data.size() - offset) / kMinBytesPerEntry) {
+        return make_error_code(ErrorCode::CorruptIndex);
+    }
     entries_.reserve(static_cast<size_t>(count));
 
     for (uint64_t i = 0; i < count; ++i) {
