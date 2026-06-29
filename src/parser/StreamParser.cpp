@@ -88,7 +88,7 @@ Result<size_t> StreamParser::feed(std::span<const uint8_t> chunk) {
 
 void StreamParser::reset() {
     state_ = ParserState::Init;
-    result_ = {};
+    result_ = ParseResult();
     buffer_.clear();
     warnings_.clear();
     bytesProcessed_ = 0;
