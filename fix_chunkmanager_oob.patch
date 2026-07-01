@@ -1,0 +1,16 @@
+diff --git a/src/storage/ChunkManager.cpp b/src/storage/ChunkManager.cpp
+index b02cf81..111a44e 100644
+--- a/src/storage/ChunkManager.cpp
++++ b/src/storage/ChunkManager.cpp
+@@ -166,6 +166,11 @@ std::error_code ChunkManager::deserialize(std::span<const uint8_t> data) {
+         chunk.originalSize = osResult.value;
+         offset += osResult.consumed;
+ 
++        // Guard: Validate we have enough bytes before reading flags
++        if (offset + 2 > data.size()) {
++            return make_error_code(ErrorCode::CorruptChunkTable);
++        }
++
+         chunk.compression = static_cast<CompressionAlgorithm>(data[offset++]);
+         chunk.encrypted = (data[offset++] != 0);
+ 

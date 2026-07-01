@@ -1,0 +1,43 @@
+diff --git a/src/metadata/MetadataStore.cpp b/src/metadata/MetadataStore.cpp
+index 88b25f3..706d0aa 100644
+--- a/src/metadata/MetadataStore.cpp
++++ b/src/metadata/MetadataStore.cpp
+@@ -1,7 +1,9 @@
+ #include "nebula/metadata/MetadataStore.hpp"
+ #include "nebula/utils/VarInt.hpp"
++#include "nebula/Config.hpp"
+ #include <cstring>
+ #include <system_error>
++#include <limits>
+ 
+ namespace nebula {
+ namespace metadata {
+@@ -76,7 +78,27 @@ std::error_code MetadataStore::deserialize(std::span<const uint8_t> data) {
+         size_t keyLen = static_cast<size_t>(keyLenResult.value);
+         size_t valLen = static_cast<size_t>(valLenResult.value);
+ 
+-        if (offset + keyLen + valLen > data.size()) {
++        // Guard: Check for integer overflow in offset calculations
++        size_t endOffset = offset;
++        if (__builtin_add_overflow(endOffset, keyLen, &endOffset)) {
++            return make_error_code(ErrorCode::CorruptMetadata);
++        }
++        if (__builtin_add_overflow(endOffset, valLen, &endOffset)) {
++            return make_error_code(ErrorCode::CorruptMetadata);
++        }
++        
++        if (endOffset > data.size()) {
++            return make_error_code(ErrorCode::CorruptMetadata);
++        }
++
++        // Guard: Validate key and value lengths
++        if (keyLen > kMaxFileNameLength || valLen > kMaxMetadataSize) {
++            return make_error_code(ErrorCode::CorruptMetadata);
++        }
++
++        // Guard: Check if sizes exceed vector max size
++        const size_t maxVecSize = std::numeric_limits<size_t>::max() / sizeof(uint8_t);
++        if (keyLen > maxVecSize || valLen > maxVecSize) {
+             return make_error_code(ErrorCode::CorruptMetadata);
+         }
+ 

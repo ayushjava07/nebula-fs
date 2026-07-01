@@ -60,7 +60,12 @@ Result<metadata::MetadataStore> Parser::parseMetadata(std::span<const uint8_t> d
         return toParseError(ErrorCode::CorruptHeader, ParserState::Header, 0);
     }
 
-    if (header.metadataOffset() + header.metadataSize() > data.size()) {
+    if (header.metadataOffset() > data.size()) {
+        return toParseError(ErrorCode::OutOfRange, ParserState::Metadata,
+                           header.metadataOffset());
+    }
+    uint64_t remaining = static_cast<uint64_t>(data.size()) - header.metadataOffset();
+    if (header.metadataSize() > remaining) {
         return toParseError(ErrorCode::OutOfRange, ParserState::Metadata,
                            header.metadataOffset());
     }
@@ -79,7 +84,12 @@ Result<filesystem::DirectoryTree> Parser::parseDirectoryTree(std::span<const uin
         return toParseError(ErrorCode::CorruptHeader, ParserState::Header, 0);
     }
 
-    if (header.directoryOffset() + header.directorySize() > data.size()) {
+    if (header.directoryOffset() > data.size()) {
+        return toParseError(ErrorCode::OutOfRange, ParserState::DirectoryTree,
+                           header.directoryOffset());
+    }
+    uint64_t remaining = static_cast<uint64_t>(data.size()) - header.directoryOffset();
+    if (header.directorySize() > remaining) {
         return toParseError(ErrorCode::OutOfRange, ParserState::DirectoryTree,
                            header.directoryOffset());
     }
@@ -104,7 +114,12 @@ Result<index::IndexManager> Parser::parseIndexTable(std::span<const uint8_t> dat
         return toParseError(ErrorCode::CorruptHeader, ParserState::Header, 0);
     }
 
-    if (header.indexOffset() + header.indexSize() > data.size()) {
+    if (header.indexOffset() > data.size()) {
+        return toParseError(ErrorCode::OutOfRange, ParserState::IndexTable,
+                           header.indexOffset());
+    }
+    uint64_t remaining = static_cast<uint64_t>(data.size()) - header.indexOffset();
+    if (header.indexSize() > remaining) {
         return toParseError(ErrorCode::OutOfRange, ParserState::IndexTable,
                            header.indexOffset());
     }
@@ -129,7 +144,12 @@ Result<storage::ChunkManager> Parser::parseChunkTable(std::span<const uint8_t> d
         return toParseError(ErrorCode::CorruptHeader, ParserState::Header, 0);
     }
 
-    if (header.chunkOffset() + header.chunkSize() > data.size()) {
+    if (header.chunkOffset() > data.size()) {
+        return toParseError(ErrorCode::OutOfRange, ParserState::ChunkTable,
+                           header.chunkOffset());
+    }
+    uint64_t remaining = static_cast<uint64_t>(data.size()) - header.chunkOffset();
+    if (header.chunkSize() > remaining) {
         return toParseError(ErrorCode::OutOfRange, ParserState::ChunkTable,
                            header.chunkOffset());
     }
@@ -234,11 +254,35 @@ Result<ParseResult> Parser::parseInternal(std::span<const uint8_t> data) {
     }
     state_ = ParserState::CompressedBlocks;
 
-    if (result.header.blocksOffset() + result.header.blocksSize() <= data.size()) {
+    // Validate blocks section bounds with overflow protection
+    const uint64_t MAX_BLOCKS_SIZE = 64 * 1024 * 1024; // 64MB reasonable limit
+
+    // Guard: Validate offset is within bounds
+    if (result.header.blocksOffset() > data.size()) {
+        result.blocksData.clear();
+    } else if (result.header.blocksSize() > static_cast<uint64_t>(data.size()) - result.header.blocksOffset()) {
+        // Blocks section exceeds available data
+        result.blocksData.clear();
+    } else if (result.header.blocksSize() > MAX_BLOCKS_SIZE) {
+        // Blocks too large - skip to prevent OOM
+        result.blocksData.clear();
+    } else if (result.header.blocksSize() > 0) {
+        // Safe assignment with bounds checking
+        try {
+            result.blocksData.resize(static_cast<size_t>(result.header.blocksSize()));
+            std::memcpy(result.blocksData.data(),
+                       data.data() + static_cast<ptrdiff_t>(result.header.blocksOffset()),
+                       static_cast<size_t>(result.header.blocksSize()));
+        } catch (const std::exception& e) {
+            result.blocksData.clear();
+            return toParseError(ErrorCode::OutOfMemory, ParserState::CompressedBlocks, 0);
+        }
+    } else {
         result.blocksData.assign(
             data.begin() + static_cast<ptrdiff_t>(result.header.blocksOffset()),
             data.begin() + static_cast<ptrdiff_t>(result.header.blocksOffset() + result.header.blocksSize()));
     }
+
     state_ = ParserState::ObjectRecon;
 
     result.valid = true;

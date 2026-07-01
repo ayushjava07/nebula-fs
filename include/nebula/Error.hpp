@@ -42,7 +42,8 @@ enum class ErrorCode : int {
     EncryptionRequired     = 28,
     AuthenticationFailed   = 29,
     InsufficientPermissions = 30,
-    InternalError          = 31
+    InternalError          = 31,
+    OutOfMemory            = 32
 };
 
 /// Custom error category for NebulaFS errors
@@ -86,6 +87,7 @@ public:
             case ErrorCode::AuthenticationFailed:return "authentication failed";
             case ErrorCode::InsufficientPermissions: return "insufficient permissions";
             case ErrorCode::InternalError:       return "internal error";
+            case ErrorCode::OutOfMemory:         return "out of memory";
             default:                             return "unknown error";
         }
     }

@@ -207,8 +207,24 @@ std::error_code HashTable::deserialize(std::span<const uint8_t> data) {
 
     entries_.resize(capacity);
 
+    {
+        constexpr size_t kMinEntrySize = 2;
+        constexpr size_t kMaxEntries = 1024 * 1024;
+
+        if (offset > data.size()) {
+            return make_error_code(ErrorCode::CorruptIndex);
+        }
+        size_t remaining = data.size() - offset;
+        if (capacity > remaining / kMinEntrySize) {
+            return make_error_code(ErrorCode::CorruptIndex);
+        }
+        if (capacity > kMaxEntries) {
+            return make_error_code(ErrorCode::CorruptIndex);
+        }
+    }
+
     for (size_t i = 0; i < capacity; ++i) {
-        if (offset >= data.size()) break;
+        if (offset + 2 > data.size()) break;
         bool occupied = data[offset++] != 0;
         bool tombstone = data[offset++] != 0;
 

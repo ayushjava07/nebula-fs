@@ -1,0 +1,21 @@
+diff --git a/src/storage/ChunkManager.cpp b/src/storage/ChunkManager.cpp
+index b02cf81..0882bad 100644
+--- a/src/storage/ChunkManager.cpp
++++ b/src/storage/ChunkManager.cpp
+@@ -140,6 +140,16 @@ std::error_code ChunkManager::deserialize(std::span<const uint8_t> data) {
+     uint64_t count = countResult.value;
+     offset = countResult.consumed;
+ 
++    constexpr size_t MAX_CHUNKS = 1024 * 1024;
++    if (count > MAX_CHUNKS) {
++        return make_error_code(ErrorCode::CorruptChunkTable);
++    }
++
++    constexpr size_t MIN_CHUNK_SIZE = 37; // 32 hash + 3×VarInt min + 2 flags
++    if (offset <= data.size() && count > (data.size() - offset) / MIN_CHUNK_SIZE) {
++        return make_error_code(ErrorCode::CorruptChunkTable);
++    }
++
+     chunks_.reserve(static_cast<size_t>(count));
+ 
+     for (uint64_t i = 0; i < count; ++i) {

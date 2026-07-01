@@ -1,0 +1,22 @@
+diff --git a/src/metadata/MetadataStore.cpp b/src/metadata/MetadataStore.cpp
+index 88b25f3..d1f0c22 100644
+--- a/src/metadata/MetadataStore.cpp
++++ b/src/metadata/MetadataStore.cpp
+@@ -76,7 +76,16 @@ std::error_code MetadataStore::deserialize(std::span<const uint8_t> data) {
+         size_t keyLen = static_cast<size_t>(keyLenResult.value);
+         size_t valLen = static_cast<size_t>(valLenResult.value);
+ 
+-        if (offset + keyLen + valLen > data.size()) {
++        constexpr size_t kMaxEntrySize = 1024 * 1024;
++
++        if (offset > data.size()) {
++            return make_error_code(ErrorCode::CorruptMetadata);
++        }
++        size_t remaining = data.size() - offset;
++        if (keyLen > remaining || valLen > remaining - keyLen) {
++            return make_error_code(ErrorCode::CorruptMetadata);
++        }
++        if (keyLen > kMaxEntrySize || valLen > kMaxEntrySize) {
+             return make_error_code(ErrorCode::CorruptMetadata);
+         }
+ 
