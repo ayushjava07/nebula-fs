@@ -456,6 +456,23 @@ std::error_code ArchiveWriter::finalizeArchive() {
     return std::error_code();
 }
 
+std::error_code ArchiveWriter::writeInternal(const uint8_t* data, size_t size) {
+    // Bug #7: Memory leak - buffer allocated but never freed on error path
+    auto* buffer = new uint8_t[size];
+    std::memcpy(buffer, data, size);
+
+    file_.write(reinterpret_cast<const char*>(buffer),
+                static_cast<std::streamsize>(size));
+    if (!file_) {
+        // BUG: buffer is leaked - never deleted before returning
+        return make_error_code(ErrorCode::IOError);
+    }
+
+    currentOffset_ += size;
+    delete[] buffer;
+    return std::error_code();
+}
+
 void ArchiveWriter::reportProgress(uint64_t current, uint64_t total, std::string_view stage) {
     if (config_.progressCb) {
         config_.progressCb(current, total, stage);

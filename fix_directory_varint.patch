@@ -1,0 +1,30 @@
+diff --git a/src/utils/VarInt.cpp b/src/utils/VarInt.cpp
+index cb969ff..a538ca4 100644
+--- a/src/utils/VarInt.cpp
++++ b/src/utils/VarInt.cpp
+@@ -29,6 +29,12 @@ void VarInt::encode(uint64_t value, std::vector<uint8_t>& buf) {
+ 
+ VarInt::DecodeResult VarInt::decode(const uint8_t* buf, size_t bufSize) {
+     DecodeResult result{0, 0, false};
++    
++    // Guard: Ensure we have at least 1 byte to read
++    if (bufSize == 0) {
++        return result;
++    }
++
+     uint64_t value = 0;
+     size_t shift = 0;
+     size_t i = 0;
+@@ -45,6 +51,12 @@ VarInt::DecodeResult VarInt::decode(const uint8_t* buf, size_t bufSize) {
+         }
+         if (shift >= 64) break;
+     }
++    
++    // If we consumed all bytes but continuation bit was set on last byte, invalid
++    if (i == bufSize && (buf[i-1] & 0x80)) {
++        return result;
++    }
++
+     result.valid = false;
+     result.consumed = i;
+     return result;

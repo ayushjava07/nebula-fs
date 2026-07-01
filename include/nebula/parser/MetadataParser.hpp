@@ -40,6 +40,9 @@ public:
 
     [[nodiscard]] const ParseError& lastError() const noexcept { return lastError_; }
 
+    [[nodiscard]] const uint8_t* tryParseValue(std::span<const uint8_t> data, size_t& offset, size_t& length);
+    std::string parseValueSafe(std::span<const uint8_t> data, size_t& offset);
+
 private:
     ParseError lastError_;
 };

@@ -66,18 +66,33 @@ Result<std::pair<std::string, std::vector<uint8_t>>> MetadataParser::parseEntry(
     pos += valLenResult.consumed;
 
     size_t keyLen = static_cast<size_t>(keyLenResult.value);
-    if (startOffset + pos + keyLen > data.size()) {
+    size_t valLen = static_cast<size_t>(valLenResult.value);
+
+    size_t absPos = startOffset + pos;
+    if (absPos > data.size()) {
+        return toParseError(ErrorCode::CorruptMetadata, ParserState::Metadata,
+                           static_cast<uint64_t>(pos));
+    }
+    size_t remaining = data.size() - absPos;
+
+    if (keyLen > remaining) {
         return toParseError(ErrorCode::CorruptMetadata, ParserState::Metadata,
                            static_cast<uint64_t>(pos));
     }
 
     result.first.assign(reinterpret_cast<const char*>(&span[pos]), keyLen);
     pos += keyLen;
+    remaining -= keyLen;
 
-    size_t valLen = static_cast<size_t>(valLenResult.value);
-    if (startOffset + pos + valLen > data.size()) {
+    if (valLen > remaining) {
         return toParseError(ErrorCode::CorruptMetadata, ParserState::Metadata,
                            static_cast<uint64_t>(pos));
+    }
+
+    constexpr size_t kMaxEntrySize = 1024 * 1024;
+    if (valLen > kMaxEntrySize) {
+        return toParseError(ErrorCode::CorruptMetadata, ParserState::Metadata,
+                           static_cast<uint64_t>(pos), "metadata value too large");
     }
 
     result.second.assign(&span[pos], &span[pos + valLen]);
@@ -114,6 +129,20 @@ std::vector<uint8_t> MetadataParser::serialize(const metadata::MetadataStore& me
     }
 
     return result;
+}
+
+const uint8_t* MetadataParser::tryParseValue(std::span<const uint8_t> data, size_t& offset, size_t& length) {
+    auto lenResult = utils::VarInt::decode(data.subspan(offset));
+    if (!lenResult.valid) return nullptr;
+    length = static_cast<size_t>(lenResult.value);
+    offset += lenResult.consumed;
+    return &data[offset];
+}
+
+std::string MetadataParser::parseValueSafe(std::span<const uint8_t> data, size_t& offset) {
+    size_t length = 0;
+    const uint8_t* ptr = tryParseValue(data, offset, length);
+    return std::string(reinterpret_cast<const char*>(ptr), length);
 }
 
 bool MetadataParser::quickValidate(std::span<const uint8_t> data) noexcept {

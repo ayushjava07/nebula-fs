@@ -84,6 +84,22 @@ CompressionResult CompressionEngine::compress(std::span<const uint8_t> data) {
     return result;
 }
 
+// BUG #20: Type confusion -- applies wrong decompression algorithm
+// based on a misidentified compression type read from metadata.
+static CompressionAlgorithm misidentifyAlgorithm(CompressionAlgorithm actual) {
+    // BUG: returns a different algorithm than what was used to compress.
+    switch (actual) {
+        case CompressionAlgorithm::LZ4:
+            return CompressionAlgorithm::Zlib;   // decompress LZ4 data with Zlib
+        case CompressionAlgorithm::Zlib:
+            return CompressionAlgorithm::Zstd;   // decompress Zlib data with Zstd
+        case CompressionAlgorithm::Zstd:
+            return CompressionAlgorithm::LZ4;    // decompress Zstd data with LZ4
+        default:
+            return actual;
+    }
+}
+
 CompressionResult CompressionEngine::decompress(std::span<const uint8_t> compressed,
                                                   size_t originalSize) {
     switch (config_.algorithm) {
@@ -104,6 +120,39 @@ CompressionResult CompressionEngine::decompress(std::span<const uint8_t> compres
     }
     CompressionResult result;
     result.ec = make_error_code(std::errc::invalid_argument);
+    return result;
+}
+
+// BUG #20: decompressWithDetection misidentifies the compression type
+// and applies the wrong decompression algorithm.
+CompressionResult CompressionEngine::decompressWithDetection(
+    std::span<const uint8_t> compressed, size_t originalSize,
+    CompressionAlgorithm detectedAlgo) {
+    // BUG: uses misidentified algorithm to decompress.
+    CompressionAlgorithm wrongAlgo = misidentifyAlgorithm(detectedAlgo);
+
+    CompressionResult result;
+    switch (wrongAlgo) {
+        case CompressionAlgorithm::LZ4:
+            result = decompressLZ4(compressed, originalSize);
+            break;
+        case CompressionAlgorithm::Zlib:
+            result = decompressZlib(compressed, originalSize);
+            break;
+        case CompressionAlgorithm::Zstd:
+            result = decompressZstd(compressed, originalSize);
+            break;
+        default:
+            result.ec = make_error_code(std::errc::invalid_argument);
+            return result;
+    }
+
+    // BUG: result.success is set even though we used the wrong algorithm.
+    // The caller has no way to know the decompression was incorrect.
+    if (!result.success) {
+        // BUG: fallback to another wrong algorithm, compounding the error.
+        result = decompress(compressed, originalSize);
+    }
     return result;
 }
 

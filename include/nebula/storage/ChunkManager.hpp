@@ -16,6 +16,8 @@
 namespace nebula {
 namespace storage {
 
+struct CachedChunkEntry;
+
 /// Configuration for chunk management.
 struct ChunkConfig {
     DedupStrategy dedupStrategy  = DedupStrategy::Content;
@@ -86,7 +88,13 @@ public:
     /// Get config
     [[nodiscard]] const ChunkConfig& config() const noexcept { return config_; }
 
+    void addChunk(uint64_t id);
+    void compact();
+    [[nodiscard]] CachedChunkEntry* getChunkCached(uint64_t id) const;
+    void processAll();
+
 private:
+    void processChunk(ChunkDescriptor& chunk);
     ChunkConfig config_;
     std::vector<ChunkDescriptor> chunks_;
     std::unordered_map<uint64_t, size_t> hashIndex_;  ///< First 8 bytes of hash -> index

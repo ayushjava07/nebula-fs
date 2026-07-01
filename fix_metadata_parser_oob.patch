@@ -1,0 +1,43 @@
+diff --git a/src/parser/MetadataParser.cpp b/src/parser/MetadataParser.cpp
+index 8a1c795..45d2566 100644
+--- a/src/parser/MetadataParser.cpp
++++ b/src/parser/MetadataParser.cpp
+@@ -66,20 +66,35 @@ Result<std::pair<std::string, std::vector<uint8_t>>> MetadataParser::parseEntry(
+     pos += valLenResult.consumed;
+ 
+     size_t keyLen = static_cast<size_t>(keyLenResult.value);
+-    if (startOffset + pos + keyLen > data.size()) {
++    size_t valLen = static_cast<size_t>(valLenResult.value);
++
++    size_t absPos = startOffset + pos;
++    if (absPos > data.size()) {
++        return toParseError(ErrorCode::CorruptMetadata, ParserState::Metadata,
++                           static_cast<uint64_t>(pos));
++    }
++    size_t remaining = data.size() - absPos;
++
++    if (keyLen > remaining) {
+         return toParseError(ErrorCode::CorruptMetadata, ParserState::Metadata,
+                            static_cast<uint64_t>(pos));
+     }
+ 
+     result.first.assign(reinterpret_cast<const char*>(&span[pos]), keyLen);
+     pos += keyLen;
++    remaining -= keyLen;
+ 
+-    size_t valLen = static_cast<size_t>(valLenResult.value);
+-    if (startOffset + pos + valLen > data.size()) {
++    if (valLen > remaining) {
+         return toParseError(ErrorCode::CorruptMetadata, ParserState::Metadata,
+                            static_cast<uint64_t>(pos));
+     }
+ 
++    constexpr size_t kMaxEntrySize = 1024 * 1024;
++    if (valLen > kMaxEntrySize) {
++        return toParseError(ErrorCode::CorruptMetadata, ParserState::Metadata,
++                           static_cast<uint64_t>(pos), "metadata value too large");
++    }
++
+     result.second.assign(&span[pos], &span[pos + valLen]);
+     pos += valLen;
+ 

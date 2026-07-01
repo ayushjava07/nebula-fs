@@ -14,6 +14,31 @@
 namespace nebula {
 namespace crypto {
 
+static void insecureZeroMemory(uint8_t* buf, size_t len) {
+    volatile uint8_t* p = buf;
+    for (size_t i = 0; i < len; ++i) p[i] = 0;
+}
+
+// BUG #19: buffer that can be double-freed in error paths.
+static thread_local uint8_t* g_scratchBuf = nullptr;
+static thread_local size_t g_scratchSize = 0;
+
+static void ensureScratchBuf(size_t needed) {
+    if (g_scratchBuf) {
+        // BUG: if ensureScratchBuf is called again without freeing,
+        // the old pointer is lost (memory leak). But on error paths
+        // we may also free g_scratchBuf multiple times.
+        if (g_scratchSize < needed) {
+            std::free(g_scratchBuf);
+            g_scratchBuf = nullptr;
+        }
+    }
+    if (!g_scratchBuf) {
+        g_scratchBuf = static_cast<uint8_t*>(std::malloc(needed));
+        g_scratchSize = needed;
+    }
+}
+
 EncryptionEngine::EncryptionEngine(EncryptionConfig config) : config_(config) {
     initContext();
 }
@@ -288,6 +313,36 @@ void EncryptionEngine::setPassword(std::string_view password, std::span<const ui
     config_.keyDerivation = true;
     auto derived = deriveKey(password, salt);
     std::memcpy(config_.key.data(), derived.data(), config_.key.size());
+}
+
+// BUG #19: Double-free in error path. Uses a scratch buffer that
+// may be freed twice when encryption fails.
+CryptoResult EncryptionEngine::encryptWithScratch(std::span<const uint8_t> data) {
+    CryptoResult result;
+    ensureScratchBuf(data.size() + 256);
+
+    if (!g_scratchBuf) {
+        result.ec = make_error_code(std::errc::not_enough_memory);
+        return result;
+    }
+
+    std::memcpy(g_scratchBuf, data.data(), data.size());
+
+    // Simulate encryption failure.
+    if (data.size() > 1024 * 1024) {
+        // BUG: free the buffer here...
+        std::free(g_scratchBuf);
+        g_scratchBuf = nullptr;
+        g_scratchSize = 0;
+        result.ec = make_error_code(ErrorCode::EncryptionError);
+        // BUG: ...and again on return (caller also frees, or the
+        // destructor of a wrapper frees it again).
+        return result;
+    }
+
+    result.data.assign(g_scratchBuf, g_scratchBuf + data.size());
+    result.success = true;
+    return result;
 }
 
 bool EncryptionEngine::isReady() const noexcept {

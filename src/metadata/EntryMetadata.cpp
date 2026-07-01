@@ -99,6 +99,8 @@ std::vector<uint8_t> EntryMetadata::serialize() const {
 std::error_code EntryMetadata::deserialize(std::span<const uint8_t> data) {
     clear();
 
+    constexpr size_t kMaxStringSize = 1024 * 1024;
+
     size_t offset = 0;
     if (offset >= data.size()) return std::error_code();
 
@@ -119,7 +121,14 @@ std::error_code EntryMetadata::deserialize(std::span<const uint8_t> data) {
         size_t nameLen = static_cast<size_t>(nameLenResult.value);
         size_t valLen = static_cast<size_t>(valLenResult.value);
 
-        if (offset + nameLen + valLen > data.size()) {
+        if (offset > data.size()) {
+            return make_error_code(ErrorCode::CorruptMetadata);
+        }
+        size_t remaining = data.size() - offset;
+        if (nameLen > remaining || valLen > remaining - nameLen) {
+            return make_error_code(ErrorCode::CorruptMetadata);
+        }
+        if (nameLen > kMaxStringSize || valLen > kMaxStringSize) {
             return make_error_code(ErrorCode::CorruptMetadata);
         }
 
@@ -143,7 +152,9 @@ std::error_code EntryMetadata::deserialize(std::span<const uint8_t> data) {
             if (!tagLenResult.valid) break;
             offset += tagLenResult.consumed;
             size_t tagLen = static_cast<size_t>(tagLenResult.value);
-            if (offset + tagLen > data.size()) break;
+            if (offset > data.size()) break;
+            if (tagLen > data.size() - offset) break;
+            if (tagLen > kMaxStringSize) break;
             tags_.emplace_back(reinterpret_cast<const char*>(&data[offset]), tagLen);
             offset += tagLen;
         }
@@ -154,7 +165,7 @@ std::error_code EntryMetadata::deserialize(std::span<const uint8_t> data) {
     if (ctLenResult.valid) {
         offset += ctLenResult.consumed;
         size_t ctLen = static_cast<size_t>(ctLenResult.value);
-        if (offset + ctLen <= data.size()) {
+        if (offset <= data.size() && ctLen <= data.size() - offset && ctLen <= kMaxStringSize) {
             contentType_ = std::string(reinterpret_cast<const char*>(&data[offset]), ctLen);
             offset += ctLen;
         }
@@ -165,7 +176,7 @@ std::error_code EntryMetadata::deserialize(std::span<const uint8_t> data) {
     if (spLenResult.valid) {
         offset += spLenResult.consumed;
         size_t spLen = static_cast<size_t>(spLenResult.value);
-        if (offset + spLen <= data.size()) {
+        if (offset <= data.size() && spLen <= data.size() - offset && spLen <= kMaxStringSize) {
             sourcePath_ = std::string(reinterpret_cast<const char*>(&data[offset]), spLen);
             offset += spLen;
         }
@@ -176,7 +187,7 @@ std::error_code EntryMetadata::deserialize(std::span<const uint8_t> data) {
     if (nLenResult.valid) {
         offset += nLenResult.consumed;
         size_t nLen = static_cast<size_t>(nLenResult.value);
-        if (offset + nLen <= data.size()) {
+        if (offset <= data.size() && nLen <= data.size() - offset && nLen <= kMaxStringSize) {
             notes_ = std::string(reinterpret_cast<const char*>(&data[offset]), nLen);
             offset += nLen;
         }

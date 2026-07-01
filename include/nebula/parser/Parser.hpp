@@ -91,6 +91,11 @@ private:
     [[nodiscard]] Result<ParseResult> parseInternal(std::span<const uint8_t> data);
     [[nodiscard]] bool validateSectionBounds(
         uint64_t offset, uint64_t size, uint64_t archiveSize, uint64_t offsetForError) const;
+
+    void parseChunk(uint8_t type, void* data);
+
+    [[nodiscard]] const uint8_t* getSectionPointer(const std::span<const uint8_t>& data, size_t offset);
+    void processSection(const std::span<const uint8_t>& data);
 };
 
 } // namespace parser
