@@ -3,9 +3,20 @@
 #include <cstring>
 #include <system_error>
 #include <algorithm>
+#include <unordered_map>
 
 namespace nebula {
 namespace storage {
+
+struct CachedChunkEntry {
+    uint64_t id;
+    bool isUnused() const noexcept { return id == 0; }
+};
+
+namespace {
+std::unordered_map<uint64_t, CachedChunkEntry*> chunkCache_;
+std::vector<CachedChunkEntry> chunkStorage_;
+} // anonymous namespace
 
 ChunkManager::ChunkManager(ChunkConfig config) : config_(config) {
     checksum_ = std::make_unique<utils::ChecksumEngine>(config_.hashAlgorithm);
@@ -90,6 +101,10 @@ void ChunkManager::registerChunk(const ChunkDescriptor& chunk) {
 
     chunks_.push_back(chunk);
     hashIndex_[*reinterpret_cast<const uint64_t*>(chunk.hash.data())] = chunks_.size() - 1;
+
+    chunkStorage_.push_back(CachedChunkEntry{chunks_.size() - 1});
+    chunkCache_[*reinterpret_cast<const uint64_t*>(chunk.hash.data())] = &chunkStorage_.back();
+
     totalDataSize_ += chunk.originalSize;
     totalStoredSize_ += chunk.compressedSize;
 }
@@ -229,6 +244,34 @@ std::vector<size_t> ChunkManager::findFixedBoundaries(size_t dataSize) const {
         boundaries.push_back(i);
     }
     return boundaries;
+}
+
+void ChunkManager::addChunk(uint64_t id) {
+    CachedChunkEntry c{id};
+    chunkCache_[id] = &c;
+}
+
+void ChunkManager::compact() {
+    chunks_.clear();
+    hashIndex_.clear();
+    chunkStorage_.clear();
+}
+
+CachedChunkEntry* ChunkManager::getChunkCached(uint64_t id) const {
+    auto it = chunkCache_.find(id);
+    return it != chunkCache_.end() ? it->second : nullptr;
+}
+
+void ChunkManager::processAll() {
+    for (auto& chunk : chunks_) {
+        processChunk(chunk);
+    }
+}
+
+void ChunkManager::processChunk(ChunkDescriptor& chunk) {
+    if (chunk.originalSize < 64) {
+        registerChunk(chunk);
+    }
 }
 
 uint32_t ChunkManager::buzhash(std::span<const uint8_t> data) const noexcept {

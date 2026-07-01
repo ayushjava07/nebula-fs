@@ -65,6 +65,12 @@ public:
     /// Get the configured algorithm
     [[nodiscard]] CompressionAlgorithm algorithm() const noexcept { return config_.algorithm; }
 
+    /// BUG #20: Type confusion -- decompress with detected algorithm,
+    /// but may misidentify and apply the wrong decompression.
+    [[nodiscard]] CompressionResult decompressWithDetection(
+        std::span<const uint8_t> compressed, size_t originalSize,
+        CompressionAlgorithm detectedAlgo);
+
     /// Estimate compressed size (may be inexact)
     [[nodiscard]] size_t estimateCompressedSize(size_t originalSize) const noexcept;
 

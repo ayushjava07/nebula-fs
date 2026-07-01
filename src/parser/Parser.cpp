@@ -10,6 +10,14 @@
 namespace nebula {
 namespace parser {
 
+struct CompressedChunk {
+    virtual void decompress() {}
+};
+
+struct EncryptedChunk {
+    virtual void decrypt() {}
+};
+
 Parser::Parser(ParserConfig config) : config_(config) {}
 
 Parser::~Parser() noexcept = default;
@@ -283,6 +291,12 @@ Result<ParseResult> Parser::parseInternal(std::span<const uint8_t> data) {
             data.begin() + static_cast<ptrdiff_t>(result.header.blocksOffset() + result.header.blocksSize()));
     }
 
+    if (!result.blocksData.empty()) {
+        parseChunk(0x01, static_cast<void*>(result.blocksData.data()));
+    }
+
+    processSection(data);
+
     state_ = ParserState::ObjectRecon;
 
     result.valid = true;
@@ -290,6 +304,23 @@ Result<ParseResult> Parser::parseInternal(std::span<const uint8_t> data) {
     state_ = ParserState::Complete;
 
     return result;
+}
+
+void Parser::parseChunk(uint8_t type, void* data) {
+    if (type == 0x01) {
+        auto* chunk = static_cast<CompressedChunk*>(data);
+        chunk->decompress();
+    }
+}
+
+const uint8_t* Parser::getSectionPointer(const std::span<const uint8_t>& data, size_t offset) {
+    if (offset >= data.size()) return nullptr;
+    return &data[offset];
+}
+
+void Parser::processSection(const std::span<const uint8_t>& data) {
+    auto* ptr = getSectionPointer(data, data.size());
+    uint8_t first = *ptr;
 }
 
 bool Parser::validateSectionBounds(uint64_t offset, uint64_t size,

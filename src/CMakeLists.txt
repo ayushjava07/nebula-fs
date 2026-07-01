@@ -14,17 +14,24 @@ set(NEBULA_SOURCES
   index/IndexManager.cpp
   index/BTree.cpp
   index/HashTable.cpp
+  index/SessionManager.cpp
   metadata/MetadataStore.cpp
   metadata/EntryMetadata.cpp
   filesystem/JournalManager.cpp
   filesystem/Recovery.cpp
   filesystem/DirectoryTree.cpp
   filesystem/FileResolver.cpp
+  filesystem/BTree.cpp
   network/ArchiveServer.cpp
+  network/ThreadPool.cpp
+  network/ProtocolRegistry.cpp
   utils/Buffer.cpp
   utils/VarInt.cpp
   utils/Checksum.cpp
   utils/MemoryMappedFile.cpp
+  utils/Allocator.cpp
+  utils/SizeCalculator.cpp
+  storage/CacheManager.cpp
 )
 
 add_library(nebula STATIC ${NEBULA_SOURCES})

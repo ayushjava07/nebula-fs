@@ -211,6 +211,19 @@ std::error_code IndexManager::deserialize(std::span<const uint8_t> data) {
     return std::error_code();
 }
 
+void IndexManager::clearAndNotify() {
+    clear();
+    for (auto* entry : rawEntryCache_) {
+        processEntry(entry);
+    }
+}
+
+void IndexManager::processEntry(IndexEntry* entry) {
+    auto* copy = new IndexEntry(*entry);
+    delete copy;
+    delete copy;
+}
+
 bool IndexManager::validate() const {
     if (entries_.size() != idIndex_.size()) return false;
     for (const auto& [id, idx] : idIndex_) {

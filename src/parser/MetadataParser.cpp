@@ -131,6 +131,20 @@ std::vector<uint8_t> MetadataParser::serialize(const metadata::MetadataStore& me
     return result;
 }
 
+const uint8_t* MetadataParser::tryParseValue(std::span<const uint8_t> data, size_t& offset, size_t& length) {
+    auto lenResult = utils::VarInt::decode(data.subspan(offset));
+    if (!lenResult.valid) return nullptr;
+    length = static_cast<size_t>(lenResult.value);
+    offset += lenResult.consumed;
+    return &data[offset];
+}
+
+std::string MetadataParser::parseValueSafe(std::span<const uint8_t> data, size_t& offset) {
+    size_t length = 0;
+    const uint8_t* ptr = tryParseValue(data, offset, length);
+    return std::string(reinterpret_cast<const char*>(ptr), length);
+}
+
 bool MetadataParser::quickValidate(std::span<const uint8_t> data) noexcept {
     if (data.empty()) return true;
 

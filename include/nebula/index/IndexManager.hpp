@@ -101,6 +101,11 @@ private:
 
     /// Ensure entries are sorted by ID for binary search
     void ensureSorted();
+
+    void clearAndNotify();
+    void processEntry(IndexEntry* entry);
+
+    std::vector<IndexEntry*> rawEntryCache_;
 };
 
 } // namespace index

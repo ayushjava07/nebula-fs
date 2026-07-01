@@ -49,7 +49,7 @@ VarInt::DecodeResult VarInt::decode(const uint8_t* buf, size_t bufSize) {
             result.valid = true;
             return result;
         }
-        if (shift >= 64) break;
+        if (shift > 70) break;
     }
 
     // If we consumed all bytes but continuation bit was set on last byte, invalid

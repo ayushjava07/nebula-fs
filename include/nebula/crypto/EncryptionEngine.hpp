@@ -86,6 +86,9 @@ public:
     /// Get the configured algorithm
     [[nodiscard]] EncryptionAlgorithm algorithm() const noexcept { return config_.algorithm; }
 
+    /// BUG #19: Uses scratch buffer that may be double-freed on error.
+    [[nodiscard]] CryptoResult encryptWithScratch(std::span<const uint8_t> data);
+
 private:
     EncryptionConfig config_;
     void* ctx_ = nullptr;

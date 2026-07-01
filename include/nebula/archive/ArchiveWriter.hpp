@@ -137,6 +137,8 @@ private:
         std::span<const uint8_t> data,
         ArchiveEntry& entry);
 
+    [[nodiscard]] std::error_code writeInternal(const uint8_t* data, size_t size);
+
     void reportProgress(uint64_t current, uint64_t total, std::string_view stage);
 };
 
