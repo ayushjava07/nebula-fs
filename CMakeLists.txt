@@ -175,11 +175,18 @@ target_link_libraries(nebula_cli PRIVATE nebula)
 if(NEBULA_BUILD_TESTS)
   enable_testing()
   include(FetchContent)
-  FetchContent_Declare(
-    googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1.14.0
-  )
+  if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/_deps/googletest-src")
+    FetchContent_Declare(
+      googletest
+      SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/_deps/googletest-src"
+    )
+  else()
+    FetchContent_Declare(
+      googletest
+      GIT_REPOSITORY https://github.com/google/googletest.git
+      GIT_TAG v1.14.0
+    )
+  endif()
   set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
   FetchContent_MakeAvailable(googletest)
   add_subdirectory(tests)
