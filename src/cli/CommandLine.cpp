@@ -1,8 +1,10 @@
 #include "nebula/cli/CommandLine.hpp"
+#include "nebula/Types.hpp"
 #include <iostream>
 #include <sstream>
 #include <filesystem>
 #include <chrono>
+#include <variant>
 
 namespace fs = std::filesystem;
 
@@ -89,42 +91,48 @@ CommandResult CommandLineHandler::handleCreate(const CommandLineOptions& options
         return CommandResult{1, "Error: missing required archive path (-a <path>)", 0, 0, false};
     }
 
-    nebula::archive::ArchiveWriterConfig config;
-    config.enableChecksums = options.calculateChecksums;
+    nebula::archive::WriterConfig config;
+    config.enableChecksum = options.calculateChecksums;
 
     if (options.compressionType == "lz4") {
-        config.compression = nebula::compression::CompressionType::LZ4;
+        config.compression = nebula::CompressionAlgorithm::LZ4;
     } else if (options.compressionType == "zstd") {
-        config.compression = nebula::compression::CompressionType::Zstd;
+        config.compression = nebula::CompressionAlgorithm::Zstd;
     } else if (options.compressionType == "zlib") {
-        config.compression = nebula::compression::CompressionType::Zlib;
+        config.compression = nebula::CompressionAlgorithm::Zlib;
     } else {
-        config.compression = nebula::compression::CompressionType::None;
+        config.compression = nebula::CompressionAlgorithm::None;
     }
 
-    nebula::archive::ArchiveWriter writer(options.archivePath, config);
+    nebula::archive::ArchiveWriter writer(config);
+    if (auto err = writer.open(options.archivePath)) {
+        return CommandResult{1, "Error: failed to open archive for writing: " + err.message(), 0, 0, false};
+    }
+
     size_t count = 0;
     uint64_t totalBytes = 0;
 
     for (const auto& file : options.inputFiles) {
         if (fs::is_regular_file(file)) {
             auto fileSize = fs::file_size(file);
-            writer.addFile(file, file);
-            count++;
-            totalBytes += fileSize;
+            if (!writer.addFile(file, file)) {
+                count++;
+                totalBytes += fileSize;
+            }
         } else if (fs::is_directory(file) && options.recursive) {
             for (const auto& entry : fs::recursive_directory_iterator(file)) {
                 if (entry.is_regular_file()) {
-                    writer.addFile(entry.path().string(), entry.path().string());
-                    count++;
-                    totalBytes += entry.file_size();
+                    if (!writer.addFile(entry.path().string(), entry.path().string())) {
+                        count++;
+                        totalBytes += entry.file_size();
+                    }
                 }
             }
         }
     }
 
-    if (!writer.finalize()) {
-        return CommandResult{2, "Error: failed to finalize archive writing", count, totalBytes, false};
+    if (auto err = writer.close()) {
+        return CommandResult{2, "Error: failed to finalize archive writing: " + err.message(), count, totalBytes, false};
     }
 
     std::stringstream ss;
@@ -138,28 +146,21 @@ CommandResult CommandLineHandler::handleExtract(const CommandLineOptions& option
         return CommandResult{1, "Error: missing archive path", 0, 0, false};
     }
 
-    nebula::archive::ArchiveReader reader(options.archivePath);
-    if (!reader.open()) {
-        return CommandResult{2, "Error: failed to open archive for extraction", 0, 0, false};
+    nebula::archive::ArchiveReader reader;
+    if (auto err = reader.open(options.archivePath)) {
+        return CommandResult{2, "Error: failed to open archive: " + err.message(), 0, 0, false};
     }
 
     std::string destDir = options.targetDirectory.empty() ? "." : options.targetDirectory;
     fs::create_directories(destDir);
 
-    auto entries = reader.listEntries();
-    size_t extracted = 0;
-
-    for (const auto& entry : entries) {
-        fs::path outPath = fs::path(destDir) / entry.path;
-        fs::create_directories(outPath.parent_path());
-        if (reader.extractEntry(entry.path, outPath.string())) {
-            extracted++;
-        }
+    if (auto err = reader.extractAll(destDir)) {
+        return CommandResult{3, "Error extracting archive: " + err.message(), 0, 0, false};
     }
 
     std::stringstream ss;
-    ss << "Extracted " << extracted << " files to " << destDir;
-    return CommandResult{0, ss.str(), extracted, 0, true};
+    ss << "Extracted " << reader.entryCount() << " files to " << destDir;
+    return CommandResult{0, ss.str(), reader.entryCount(), 0, true};
 }
 
 CommandResult CommandLineHandler::handleList(const CommandLineOptions& options) {
@@ -167,12 +168,18 @@ CommandResult CommandLineHandler::handleList(const CommandLineOptions& options) 
         return CommandResult{1, "Error: missing archive path", 0, 0, false};
     }
 
-    nebula::archive::ArchiveReader reader(options.archivePath);
-    if (!reader.open()) {
-        return CommandResult{2, "Error: failed to open archive for reading", 0, 0, false};
+    nebula::archive::ArchiveReader reader;
+    if (auto err = reader.open(options.archivePath)) {
+        return CommandResult{2, "Error: failed to open archive: " + err.message(), 0, 0, false};
     }
 
-    auto entries = reader.listEntries();
+    auto entriesResult = reader.listEntries();
+    if (std::holds_alternative<nebula::ParseError>(entriesResult)) {
+        const auto& err = std::get<nebula::ParseError>(entriesResult);
+        return CommandResult{3, "Error listing entries: " + err.message, 0, 0, false};
+    }
+
+    const auto& entries = std::get<std::vector<nebula::ArchiveEntry>>(entriesResult);
     std::stringstream ss;
     ss << "Archive: " << options.archivePath << "\n";
     ss << "Total Entries: " << entries.size() << "\n";
@@ -182,8 +189,8 @@ CommandResult CommandLineHandler::handleList(const CommandLineOptions& options) 
 
     uint64_t totalSize = 0;
     for (const auto& entry : entries) {
-        ss << entry.uncompressedSize << "\t\t" << entry.path << "\n";
-        totalSize += entry.uncompressedSize;
+        ss << entry.originalSize << "\t\t" << entry.path << "\n";
+        totalSize += entry.originalSize;
     }
     ss << "--------------------------------------------------------\n";
     ss << "Total Size: " << totalSize << " bytes\n";
@@ -196,13 +203,12 @@ CommandResult CommandLineHandler::handleVerify(const CommandLineOptions& options
         return CommandResult{1, "Error: missing archive path", 0, 0, false};
     }
 
-    nebula::archive::ArchiveReader reader(options.archivePath);
-    if (!reader.open()) {
-        return CommandResult{2, "Error: corrupt archive or bad magic header", 0, 0, false};
-    }
+    nebula::archive::ReaderConfig config;
+    config.verifyChecksums = true;
+    nebula::archive::ArchiveReader reader(config);
 
-    if (!reader.verifyChecksums()) {
-        return CommandResult{3, "Integrity Check FAILED: checksum mismatch detected", 0, 0, false};
+    if (auto err = reader.open(options.archivePath)) {
+        return CommandResult{2, "Integrity Check FAILED: cannot open archive: " + err.message(), 0, 0, false};
     }
 
     return CommandResult{0, "Integrity Check PASSED: all blocks and checksums valid", reader.entryCount(), 0, true};
@@ -213,22 +219,26 @@ CommandResult CommandLineHandler::handleRepair(const CommandLineOptions& options
         return CommandResult{1, "Error: missing archive path", 0, 0, false};
     }
 
-    nebula::archive::ArchiveReader reader(options.archivePath);
-    // Attempt recovery pass
-    bool recovered = reader.attemptRecovery();
-    if (!recovered) {
-        return CommandResult{2, "Repair failed: archive payload unrecoverable", 0, 0, false};
+    nebula::archive::ArchiveReader reader;
+    if (auto err = reader.open(options.archivePath)) {
+        return CommandResult{1, "Cannot open archive: " + err.message(), 0, 0, false};
     }
 
-    return CommandResult{0, "Archive successfully repaired and journal rolled forward", 0, 0, true};
+    if (reader.needsRecovery()) {
+        if (auto err = reader.recover()) {
+            return CommandResult{2, "Repair failed: " + err.message(), 0, 0, false};
+        }
+        return CommandResult{0, "Archive successfully repaired and journal rolled forward", reader.entryCount(), 0, true};
+    }
+
+    return CommandResult{0, "Archive is clean; no repair needed", reader.entryCount(), 0, true};
 }
 
 CommandResult CommandLineHandler::handleBenchmark(const CommandLineOptions& options) {
     std::stringstream ss;
-    ss << "Running NebulaFS benchmark...\n";
+    ss << "Running NebulaFS synthetic benchmark...\n";
 
     auto start = std::chrono::high_resolution_clock::now();
-    // Synthetic compression & packing benchmark
     size_t dummyBlocks = 1000;
     uint64_t bytesProcessed = dummyBlocks * 64 * 1024; // 64 MB
     auto end = std::chrono::high_resolution_clock::now();
