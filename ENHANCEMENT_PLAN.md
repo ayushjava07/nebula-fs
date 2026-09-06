@@ -129,3 +129,6 @@ b3648b2 | phase 2 | gate: PASS | fix(parser): resolve null pointer dereference i
 92e0835 | phase 2 | gate: PASS | feat(storage): add MemoryStorageBackend implementation
 0ba0463 | phase 2 | gate: PASS | feat(search): implement text tokenizer with stopword filtering and term frequencies
 8b8fabd | phase 2 | gate: PASS | feat(search): implement delta-encoded posting list serialization and BM25 scorer
+f4d9fd4 | phase 2 | gate: PASS | feat(search): implement full-text InvertedIndex with ranking and unit test suite
+611a9cf | phase 2 | gate: PASS | feat(snapshot): implement SnapshotManifest and binary serialization
+6dfa9d8 | phase 2 | gate: PASS | feat(snapshot): implement DeltaEngine diffing and PatchApplier reconstruction

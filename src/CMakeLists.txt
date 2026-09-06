@@ -43,6 +43,10 @@ set(NEBULA_SOURCES
   search/PostingList.cpp
   search/BM25Scorer.cpp
   search/InvertedIndex.cpp
+  snapshot/SnapshotManifest.cpp
+  snapshot/DeltaEngine.cpp
+  snapshot/PatchApplier.cpp
+  snapshot/SnapshotManager.cpp
 )
 
 add_library(nebula STATIC ${NEBULA_SOURCES})
