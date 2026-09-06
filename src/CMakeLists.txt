@@ -32,6 +32,7 @@ set(NEBULA_SOURCES
   utils/Allocator.cpp
   utils/SizeCalculator.cpp
   storage/CacheManager.cpp
+  cli/CommandLine.cpp
 )
 
 add_library(nebula STATIC ${NEBULA_SOURCES})

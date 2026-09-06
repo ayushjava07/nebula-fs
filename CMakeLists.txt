@@ -158,6 +158,11 @@ set(NEBULA_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 
 add_subdirectory(src)
 
+# CLI Binary
+add_executable(nebula cmd/nebula/main.cpp)
+target_include_directories(nebula PRIVATE ${NEBULA_INCLUDE_DIR})
+target_link_libraries(nebula PRIVATE nebula)
+
 if(NEBULA_BUILD_TESTS)
   enable_testing()
   include(FetchContent)
