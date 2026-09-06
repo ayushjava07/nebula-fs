@@ -36,6 +36,9 @@ set(NEBULA_SOURCES
   dashboard/DashboardMetrics.cpp
   dashboard/DashboardRenderer.cpp
   dashboard/DashboardController.cpp
+  storage/backend/MemoryStorageBackend.cpp
+  storage/backend/FileStorageBackend.cpp
+  storage/backend/TieredStorageManager.cpp
 )
 
 add_library(nebula STATIC ${NEBULA_SOURCES})

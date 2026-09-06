@@ -123,3 +123,5 @@ Given C++20's direct memory access and concurrency model, all 12 categories are 
 91fad1b | phase 2 | gate: PASS | feat(dashboard): implement console dashboard renderer and json export
 7ffff32 | phase 2 | gate: PASS | feat(dashboard): add DashboardController for archive inspection and metrics collection
 b3648b2 | phase 2 | gate: PASS | fix(parser): resolve null pointer dereference in section processing and remove unsafe polymorphic cast
+06fc9da | phase 2 | gate: PASS | feat(cli): integrate dashboard inspection command into operator CLI
+1a4583b | phase 2 | gate: PASS | feat(storage): implement MemoryStorageBackend and StorageBackend interface
