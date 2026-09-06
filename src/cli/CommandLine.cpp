@@ -1,4 +1,5 @@
 #include "nebula/cli/CommandLine.hpp"
+#include "nebula/dashboard/DashboardController.hpp"
 #include "nebula/Types.hpp"
 #include <iostream>
 #include <sstream>
@@ -30,6 +31,8 @@ CommandLineOptions CommandLineHandler::parse(int argc, const char* const* argv) 
         opts.command = CommandType::Repair;
     } else if (cmd == "benchmark" || cmd == "-b") {
         opts.command = CommandType::Benchmark;
+    } else if (cmd == "inspect" || cmd == "dashboard" || cmd == "-i") {
+        opts.command = CommandType::Inspect;
     } else if (cmd == "help" || cmd == "--help" || cmd == "-h") {
         opts.command = CommandType::Help;
         return opts;
@@ -78,6 +81,8 @@ CommandResult CommandLineHandler::execute(const CommandLineOptions& options) {
             return handleRepair(options);
         case CommandType::Benchmark:
             return handleBenchmark(options);
+        case CommandType::Inspect:
+            return handleInspect(options);
         case CommandType::Help:
             return CommandResult{0, getHelpString(), 0, 0, true};
         case CommandType::Unknown:
@@ -250,6 +255,23 @@ CommandResult CommandLineHandler::handleBenchmark(const CommandLineOptions& opti
     return CommandResult{0, ss.str(), dummyBlocks, bytesProcessed, true};
 }
 
+CommandResult CommandLineHandler::handleInspect(const CommandLineOptions& options) {
+    if (options.archivePath.empty()) {
+        return CommandResult{1, "Error: missing required archive path (-a <path>)", 0, 0, false};
+    }
+
+    nebula::dashboard::RendererOptions renderOpts;
+    renderOpts.format = nebula::dashboard::OutputFormat::PlainText;
+    nebula::dashboard::DashboardController controller(renderOpts);
+
+    auto result = controller.inspectArchive(options.archivePath);
+    if (!result.success) {
+        return CommandResult{2, "Inspection failed: " + result.errorMessage, 0, 0, false};
+    }
+
+    return CommandResult{0, result.renderedOutput, result.snapshot.totalEntries, result.snapshot.uncompressedBytes, true};
+}
+
 std::string CommandLineHandler::getHelpString() const {
     return "NebulaFS Operator CLI\n"
            "Usage: nebula <command> [options]\n\n"
@@ -257,6 +279,7 @@ std::string CommandLineHandler::getHelpString() const {
            "  create    -a <archive> <files...>  Pack files into an archive\n"
            "  extract   -a <archive> -d <dir>    Extract archive contents\n"
            "  list      -a <archive>             List entries in archive\n"
+           "  inspect   -a <archive>             Inspect layout, metrics, and entropy\n"
            "  verify    -a <archive>             Verify block checksums\n"
            "  repair    -a <archive>             Repair archive from journal\n"
            "  benchmark                          Run throughput benchmarks\n"

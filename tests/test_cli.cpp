@@ -69,3 +69,17 @@ TEST(CommandLineTest, BenchmarkExecution) {
     EXPECT_TRUE(res.success);
     EXPECT_GT(res.processedBytes, 0);
 }
+
+TEST(CommandLineTest, ParseInspectCommand) {
+    CommandLineHandler handler;
+    const char* argv[] = {"nebula", "inspect", "-a", "target.nbf"};
+    auto opts = handler.parse(4, argv);
+
+    EXPECT_EQ(opts.command, CommandType::Inspect);
+    EXPECT_EQ(opts.archivePath, "target.nbf");
+
+    // Missing file returns exitCode != 0
+    auto res = handler.execute(opts);
+    EXPECT_NE(res.exitCode, 0);
+    EXPECT_FALSE(res.success);
+}

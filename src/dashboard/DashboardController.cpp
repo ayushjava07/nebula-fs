@@ -50,7 +50,7 @@ InspectionResult DashboardController::inspectArchive(const std::string& archiveP
         totalStored += entry.storedSize;
 
         // Sample entry data for entropy
-        auto extractRes = reader.extractEntry(entry.path);
+        auto extractRes = entry.path.empty() ? reader.extractEntry(entry.id) : reader.extractEntry(entry.path);
         if (std::holds_alternative<std::vector<uint8_t>>(extractRes)) {
             const auto& data = std::get<std::vector<uint8_t>>(extractRes);
             auto sample = DashboardMetricsCollector::sampleBlockEntropy(currentOffset, data);

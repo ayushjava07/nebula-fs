@@ -17,6 +17,7 @@ enum class CommandType {
     Verify,
     Repair,
     Benchmark,
+    Inspect,
     Help,
     Unknown
 };
@@ -60,6 +61,7 @@ private:
     CommandResult handleVerify(const CommandLineOptions& options);
     CommandResult handleRepair(const CommandLineOptions& options);
     CommandResult handleBenchmark(const CommandLineOptions& options);
+    CommandResult handleInspect(const CommandLineOptions& options);
 };
 
 } // namespace nebula::cli
