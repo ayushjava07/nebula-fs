@@ -132,3 +132,4 @@ b3648b2 | phase 2 | gate: PASS | fix(parser): resolve null pointer dereference i
 f4d9fd4 | phase 2 | gate: PASS | feat(search): implement full-text InvertedIndex with ranking and unit test suite
 611a9cf | phase 2 | gate: PASS | feat(snapshot): implement SnapshotManifest and binary serialization
 6dfa9d8 | phase 2 | gate: PASS | feat(snapshot): implement DeltaEngine diffing and PatchApplier reconstruction
+4656f3b | phase 2 | gate: PASS | feat(snapshot): implement SnapshotManager version lineage and unit test suite
