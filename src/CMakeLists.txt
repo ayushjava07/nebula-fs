@@ -39,6 +39,10 @@ set(NEBULA_SOURCES
   storage/backend/MemoryStorageBackend.cpp
   storage/backend/FileStorageBackend.cpp
   storage/backend/TieredStorageManager.cpp
+  search/Tokenizer.cpp
+  search/PostingList.cpp
+  search/BM25Scorer.cpp
+  search/InvertedIndex.cpp
 )
 
 add_library(nebula STATIC ${NEBULA_SOURCES})

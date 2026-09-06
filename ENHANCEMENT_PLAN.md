@@ -125,3 +125,7 @@ Given C++20's direct memory access and concurrency model, all 12 categories are 
 b3648b2 | phase 2 | gate: PASS | fix(parser): resolve null pointer dereference in section processing and remove unsafe polymorphic cast
 06fc9da | phase 2 | gate: PASS | feat(cli): integrate dashboard inspection command into operator CLI
 1a4583b | phase 2 | gate: PASS | feat(storage): implement MemoryStorageBackend and StorageBackend interface
+888edd9 | phase 2 | gate: PASS | feat(storage): implement FileStorageBackend and TieredStorageManager with automated LRU spilling
+92e0835 | phase 2 | gate: PASS | feat(storage): add MemoryStorageBackend implementation
+0ba0463 | phase 2 | gate: PASS | feat(search): implement text tokenizer with stopword filtering and term frequencies
+8b8fabd | phase 2 | gate: PASS | feat(search): implement delta-encoded posting list serialization and BM25 scorer
