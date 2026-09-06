@@ -26,6 +26,7 @@ set(TEST_SOURCES
   test_cli.cpp
   test_dashboard_metrics.cpp
   test_dashboard_renderer.cpp
+  test_dashboard_controller.cpp
 )
 
 add_executable(nebula_tests ${TEST_SOURCES})
