@@ -34,6 +34,7 @@ set(NEBULA_SOURCES
   storage/CacheManager.cpp
   cli/CommandLine.cpp
   dashboard/DashboardMetrics.cpp
+  dashboard/DashboardRenderer.cpp
 )
 
 add_library(nebula STATIC ${NEBULA_SOURCES})
